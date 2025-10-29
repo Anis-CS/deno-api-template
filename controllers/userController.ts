@@ -1,6 +1,7 @@
 // controllers/userController.ts
 
 import { Context } from "https://deno.land/x/oak/mod.ts";
+
 import { 
   getAllUsers, 
   getUserById, 
@@ -319,10 +320,4 @@ export const removeUser = async (ctx: Context) => {
   }
 };
 //form data delete controller end
-
-
-
-
-
-
 

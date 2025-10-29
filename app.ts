@@ -1,31 +1,42 @@
 import { Application, send } from "https://deno.land/x/oak@v17.1.6/mod.ts";
 import router from "./routes/userRoutes.ts";
+import authRouter from "./routes/authRoutes.ts";
 
 const app = new Application();
 
-// Middleware for logging
+// CORS middleware (optional - frontend theke API call er jonno)
 app.use(async (ctx, next) => {
-  console.log(`${ctx.request.method} ${ctx.request.url.pathname}`);
+  ctx.response.headers.set("Access-Control-Allow-Origin", "*");
+  ctx.response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  ctx.response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  
+  if (ctx.request.method === "OPTIONS") {
+    ctx.response.status = 200;
+    return;
+  }
+  
   await next();
 });
 
-// Serve uploaded images
+// Error handling middleware
 app.use(async (ctx, next) => {
-  const path = ctx.request.url.pathname;
-  if (path.startsWith("/uploads/")) {
-    try {
-      await send(ctx, path, {
-        root: `${Deno.cwd()}`,
-      });
-    } catch {
-      await next();
-    }
-  } else {
+  try {
     await next();
+  } catch (err) {
+    console.error("Error:", err);
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Internal server error"
+    };
   }
 });
 
-// Routes
+// ✅ First, auth routes
+app.use(authRouter.routes());
+app.use(authRouter.allowedMethods());
+
+// ✅ Then, user routes
 app.use(router.routes());
 app.use(router.allowedMethods());
 
