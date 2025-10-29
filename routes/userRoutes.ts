@@ -5,8 +5,8 @@ import {
     getUsers,
     getUser,
     addUser,
-    // editUser,
-    // removeUser,
+    editUser,
+    removeUser,
 
  } from "../controllers/userController.ts";
 
@@ -14,9 +14,9 @@ const router = new Router();
 
 router
     .get("/api/users", getUsers)
-    .get("/api/user/:id", getUser)
+    .get("/api/users/:id", getUser)
     .post("/api/users", addUser)
-    // .put("/api/users/:id", editUser)
-    // .delete("/api/users/:id", removeUser);
+    .put("/api/users/:id", editUser)
+    .delete("/api/users/:id", removeUser);
 
 export default router;

@@ -1,12 +1,13 @@
-import { Application, Router, send } from "https://deno.land/x/oak@v17.1.6/mod.ts";
-import { addUser, getUsers } from "./controllers/userController.ts";
+import { Application, send } from "https://deno.land/x/oak@v17.1.6/mod.ts";
+import router from "./routes/userRoutes.ts";
 
 const app = new Application();
-const router = new Router();
 
-// API routes
-router.post("/api/users", addUser);
-router.get("/api/users", getUsers);
+// Middleware for logging
+app.use(async (ctx, next) => {
+  console.log(`${ctx.request.method} ${ctx.request.url.pathname}`);
+  await next();
+});
 
 // Serve uploaded images
 app.use(async (ctx, next) => {
@@ -24,6 +25,7 @@ app.use(async (ctx, next) => {
   }
 });
 
+// Routes
 app.use(router.routes());
 app.use(router.allowedMethods());
 
