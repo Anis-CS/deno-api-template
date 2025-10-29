@@ -1,19 +1,31 @@
-// app.ts
-import { Application } from "https://deno.land/x/oak/mod.ts";
-import userRoutes from "./routes/userRoutes.ts";
+import { Application, Router, send } from "https://deno.land/x/oak@v17.1.6/mod.ts";
+import { addUser, getUsers } from "./controllers/userController.ts";
 
 const app = new Application();
-const PORT = 5000;
+const router = new Router();
 
-// Logging middleware
+// API routes
+router.post("/api/users", addUser);
+router.get("/api/users", getUsers);
+
+// Serve uploaded images
 app.use(async (ctx, next) => {
-  console.log(`${ctx.request.method} ${ctx.request.url}`);
-  await next();
+  const path = ctx.request.url.pathname;
+  if (path.startsWith("/uploads/")) {
+    try {
+      await send(ctx, path, {
+        root: `${Deno.cwd()}`,
+      });
+    } catch {
+      await next();
+    }
+  } else {
+    await next();
+  }
 });
 
-// Routes
-app.use(userRoutes.routes());
-app.use(userRoutes.allowedMethods());
+app.use(router.routes());
+app.use(router.allowedMethods());
 
-console.log(`🚀 Server running at http://localhost:${PORT}`);
-await app.listen({ port: PORT });
+console.log("🚀 Server running at http://localhost:5000");
+await app.listen({ port: 5000 });

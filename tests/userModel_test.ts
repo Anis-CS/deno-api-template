@@ -1,6 +1,11 @@
 // tests/userModel_test.ts
 import { assertEquals } from "https://deno.land/std@0.203.0/testing/asserts.ts";
-import { createUser, deletedUser, getAllUsers, getUserById, updateUser, User } from "../models/userModel.ts";
+import { createUser,
+  // deletedUser, 
+  getAllUsers, 
+  getUserById,
+  //  updateUser,
+    User } from "../models/userModel.ts";
 
 // প্রতিটি test এর আগে users array reset করার জন্য
 let initialUsers: User[];

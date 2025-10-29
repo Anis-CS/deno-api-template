@@ -1,9 +1,10 @@
 // routes/userRoutes.ts
 import { Router } from "https://deno.land/x/oak/mod.ts";
+
 import { 
     getUsers,
     getUser,
-    // addUser,
+    addUser,
     // editUser,
     // removeUser,
 
@@ -13,8 +14,8 @@ const router = new Router();
 
 router
     .get("/api/users", getUsers)
-    .get("/api/user/:id", getUser);
-    // .post("/api/users", addUser)
+    .get("/api/user/:id", getUser)
+    .post("/api/users", addUser)
     // .put("/api/users/:id", editUser)
     // .delete("/api/users/:id", removeUser);
 
