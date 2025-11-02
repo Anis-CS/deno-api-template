@@ -1,0 +1,376 @@
+<!-- client.html -->
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Deno WebSocket Chat (Demo)</title>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 12px; 
+      background-color: rgb(51, 45, 38);
+      color: #fff;
+    }
+    #chat { 
+      border: 1px solid #8f6f6f; 
+      height: 320px; 
+      overflow:auto; 
+      padding:8px;
+      background-color: rgba(255,255,255,0.05);
+      border-radius: 4px;
+    }
+    #users { 
+      border: 1px solid #eee; 
+      padding:8px; 
+      width:200px; 
+      height:320px; 
+      overflow:auto;
+      background-color: rgba(255,255,255,0.05);
+      border-radius: 4px;
+    }
+    .row { display:flex; gap:12px; }
+    .msg { 
+      margin:6px 0; 
+      padding: 4px;
+      border-radius: 3px;
+    }
+    .sys { 
+      color: #999; 
+      font-size:0.9em; 
+      font-style: italic;
+    }
+    .history-msg {
+      opacity: 0.8;
+      border-left: 2px solid #666;
+      padding-left: 6px;
+    }
+    .me { font-weight:600; }
+    input {
+      padding: 6px;
+      border-radius: 3px;
+      border: 1px solid #666;
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+    }
+    button {
+      padding: 6px 12px;
+      border-radius: 3px;
+      border: none;
+      background: #5a9;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #6ba;
+    }
+    .timestamp {
+      font-size: 0.75em;
+      color: #888;
+      margin-right: 6px;
+    }
+    #connectionStatus {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 0.85em;
+    }
+    .status-connected { background: #5a9; }
+    .status-disconnected { background: #d44; }
+    .status-connecting { background: #fa0; }
+  </style>
+</head>
+<body>
+  <div id="connectionStatus" class="status-connecting">Connecting...</div>
+  <h2>Deno WebSocket Chat (Demo)</h2>
+
+  <div class="row">
+    <div style="flex:1">
+      <div id="chat"></div>
+      <div style="margin-top:8px;">
+        <input id="nameInput" placeholder="Enter name" />
+        <button id="setNameBtn">Set Name</button>
+      </div>
+      <div style="margin-top:8px;">
+        <input id="messageInput" placeholder="Type a message" style="width:70%" />
+        <button id="sendBtn">Send</button>
+      </div>
+    </div>
+
+    <div style="width:220px">
+      <h4>Online Users</h4>
+      <div id="users"></div>
+    </div>
+  </div>
+
+  <script>
+    const wsUrl = "ws://localhost:9090"; 
+    let conn = null;
+    let reconnectTimeout = null;
+    let isManualClose = false;
+
+    const chatEl = document.getElementById("chat");
+    const usersEl = document.getElementById("users");
+    const nameInput = document.getElementById("nameInput");
+    const setNameBtn = document.getElementById("setNameBtn");
+    const messageInput = document.getElementById("messageInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const statusEl = document.getElementById("connectionStatus");
+
+    // Update connection status UI
+    function updateStatus(status) {
+      statusEl.className = '';
+      if (status === 'connected') {
+        statusEl.textContent = '🟢 Connected';
+        statusEl.classList.add('status-connected');
+      } else if (status === 'connecting') {
+        statusEl.textContent = '🟡 Connecting...';
+        statusEl.classList.add('status-connecting');
+      } else {
+        statusEl.textContent = '🔴 Disconnected';
+        statusEl.classList.add('status-disconnected');
+      }
+    }
+
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Format timestamp
+    function formatTime(timestamp) {
+      const date = new Date(timestamp);
+      return date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+    }
+
+    // Append message safely
+    function append(msg, cls = "", isHTML = false) {
+      const d = document.createElement("div");
+      d.className = "msg " + cls;
+      
+      if (isHTML) {
+        d.innerHTML = msg;
+      } else {
+        d.textContent = msg;
+      }
+      
+      chatEl.appendChild(d);
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+
+    // Append user message with proper structure
+    function appendMessage(from, text, timestamp = null, isHistory = false) {
+      const msgDiv = document.createElement("div");
+      msgDiv.className = "msg" + (isHistory ? " history-msg" : "");
+      
+      // Add timestamp if available
+      if (timestamp) {
+        const timeSpan = document.createElement("span");
+        timeSpan.className = "timestamp";
+        timeSpan.textContent = formatTime(timestamp);
+        msgDiv.appendChild(timeSpan);
+      }
+      
+      // Add sender name
+      const nameSpan = document.createElement("b");
+      nameSpan.textContent = escapeHtml(from) + ": ";
+      msgDiv.appendChild(nameSpan);
+      
+      // Add message text
+      const textSpan = document.createElement("span");
+      textSpan.textContent = escapeHtml(text);
+      msgDiv.appendChild(textSpan);
+      
+      chatEl.appendChild(msgDiv);
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+
+    // Close existing connection properly
+    function closeConnection() {
+      if (conn) {
+        isManualClose = true;
+        conn.close();
+        conn = null;
+      }
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
+    }
+
+    // Setup WebSocket connection
+    function setupConnection() {
+      // Close any existing connection first
+      if (conn && conn.readyState !== WebSocket.CLOSED) {
+        console.log("Closing existing connection...");
+        conn.close();
+      }
+
+      updateStatus('connecting');
+      conn = new WebSocket(wsUrl);
+
+      conn.addEventListener("open", () => {
+        console.log("WebSocket connected");
+        updateStatus('connected');
+        append("[Connected to server]", "sys", true);
+        isManualClose = false;
+        
+        // Clear any pending reconnection attempts
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = null;
+        }
+      });
+
+      conn.addEventListener("message", (e) => {
+        let data;
+        try { 
+          data = JSON.parse(e.data); 
+        } catch (err) { 
+          console.error("Failed to parse message:", err);
+          append(e.data); 
+          return; 
+        }
+
+        console.log("Received:", data.type, data);
+
+        switch (data.type) {
+          case "welcome":
+            append(`[system] ${escapeHtml(data.message)}`, "sys", true);
+            break;
+            
+          case "system":
+            append(`[system] ${escapeHtml(data.message)}`, "sys", true);
+            break;
+            
+          case "history":
+            // Handle historic messages from database
+            console.log("History received:", data.messages?.length || 0, "messages");
+            if (data.messages && Array.isArray(data.messages)) {
+              if (data.messages.length > 0) {
+                append("[--- Message History ---]", "sys", true);
+                data.messages.forEach(msg => {
+                  // Database returns: sender_name, message_text, created_at
+                  appendMessage(
+                    msg.sender_name, 
+                    msg.message_text, 
+                    msg.created_at,
+                    true // isHistory flag
+                  );
+                });
+                append("[--- End of History ---]", "sys", true);
+              } else {
+                append("[No message history]", "sys", true);
+              }
+            }
+            break;
+            
+          case "message":
+            // Handle new messages (from server broadcast)
+            // Server sends: from, text, ts
+            appendMessage(
+              data.from, 
+              data.text, 
+              data.ts
+            );
+            break;
+            
+          case "users":
+            // Update online users list
+            if (data.users && Array.isArray(data.users)) {
+              usersEl.innerHTML = data.users
+                .map(u => `<div>👤 ${escapeHtml(u.name)}</div>`)
+                .join("");
+            }
+            break;
+            
+          case "error":
+            append(`[error] ${escapeHtml(data.message)}`, "sys", true);
+            break;
+            
+          default:
+            console.log("Unknown message type:", data);
+        }
+      });
+
+      conn.addEventListener("close", (event) => {
+        console.log("WebSocket closed:", event.code, event.reason);
+        updateStatus('disconnected');
+        append("[Disconnected from server]", "sys", true);
+        
+        // Only auto-reconnect if it wasn't a manual close
+        if (!isManualClose) {
+          append("[Attempting to reconnect in 3 seconds...]", "sys", true);
+          reconnectTimeout = setTimeout(() => {
+            console.log("Attempting reconnection...");
+            setupConnection();
+          }, 3000);
+        }
+      });
+
+      conn.addEventListener("error", (e) => {
+        console.error("WebSocket error:", e);
+        updateStatus('disconnected');
+        append("[Connection error]", "sys", true);
+      });
+    }
+
+    // Initialize connection on page load
+    setupConnection();
+
+    // Cleanup on page unload
+    window.addEventListener("beforeunload", () => {
+      closeConnection();
+    });
+
+    // Set name button
+    setNameBtn.addEventListener("click", () => {
+      const name = nameInput.value.trim();
+      if (!name) return alert("Please enter a name");
+      if (name.length > 50) return alert("Name too long (max 50 characters)");
+      
+      if (conn && conn.readyState === WebSocket.OPEN) {
+        conn.send(JSON.stringify({ type: "set_name", name }));
+        nameInput.value = "";
+      } else {
+        alert("Not connected to server");
+      }
+    });
+
+    // Send message button
+    sendBtn.addEventListener("click", () => {
+      const text = messageInput.value.trim();
+      if (!text) return;
+      if (text.length > 1000) return alert("Message too long (max 1000 characters)");
+      
+      if (conn && conn.readyState === WebSocket.OPEN) {
+        conn.send(JSON.stringify({ type: "message", text }));
+        messageInput.value = "";
+      } else {
+        alert("Not connected to server");
+      }
+    });
+
+    // Enter key to send
+    messageInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendBtn.click();
+      }
+    });
+    
+    nameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        setNameBtn.click();
+      }
+    });
+  </script>
+</body>
+</html>

@@ -15,7 +15,7 @@ const router = new Router();
 router
     .get("/api/users", authMiddleware, getUsers)
     .get("/api/users/:id", authMiddleware, getUser)
-    .post("/api/users", authMiddleware, addUser)
+    .post("/api/users", addUser)
     .put("/api/users/:id", authMiddleware, editUser)
     .delete("/api/users/:id", authMiddleware, removeUser);
 

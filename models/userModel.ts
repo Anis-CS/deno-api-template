@@ -6,7 +6,7 @@ export interface User {
   id?: number;
   name: string;
   email: string;
-  password?: string; // ✅ Password field add korchi
+  password?: string;
   image?: string | null; 
   created_at?: Date;
 }
@@ -46,7 +46,7 @@ export const getUserById = async (id: number): Promise<User | null> => {
     };
   }
 
-  console.log("❌ User not found with ID:", id);
+  console.log("User not found with ID:", id);
   return null;
 };
 
@@ -85,8 +85,19 @@ export const createUser = async (userData: {
   const hashedPassword = await bcrypt.hash(userData.password);
   
   const result = await client.execute(
-    `INSERT INTO users (name, email, password, image, created_at) VALUES (?, ?, ?, ?, NOW())`,
-    [userData.name, userData.email, hashedPassword, userData.image || null]
+    `INSERT INTO users (
+        name, 
+        email, 
+        password, 
+        image, 
+        created_at
+      ) VALUES (?, ?, ?, ?, NOW())`,
+    [
+      userData.name, 
+      userData.email, 
+      hashedPassword, 
+      userData.image || null
+    ]
   );
   
   return {

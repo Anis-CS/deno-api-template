@@ -12,7 +12,7 @@ import {
 
 export const getUsers = async (ctx: Context) => {
   try {
-    const users = await getAllUsers(); // ✅ await ব্যবহার করো
+    const users = await getAllUsers();
     ctx.response.status = 200;
     ctx.response.body = {
       success: true,
@@ -22,15 +22,14 @@ export const getUsers = async (ctx: Context) => {
     ctx.response.status = 500;
     ctx.response.body = {
       success: false,
-      message: "Error fetching users",
-      error: error.message,
+      message: "Error fetching users", 
     };
   }
 };
 
 export const getUser = async (ctx: Context) => {
   try {
-    const id = Number(ctx.params.id); // 🟢 এখানে id নাও
+    const id = Number(ctx.params.id); 
     console.log("User ID:", id);
 
     const user = await getUserById(id);
